@@ -1,0 +1,49 @@
+
+name: 'snowplow_fractribution'
+version: '0.2.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'default'
+
+
+# These configurations specify where dbt should look for different types of files.
+# The `model-paths` config, for example, states that models in this project can be
+# found in the "models/" directory. You probably won't need to change these!
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+docs-paths: ["docs"]
+
+target-path: "target"  # directory which will store compiled SQL files
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+vars:
+  snowplow__conversion_window_start_date: '2023-03-13' # conversion window start date
+  snowplow__conversion_window_end_date: '2023-03-21' # conversion window end date is dynamically set to current_date()-1 in the code
+  snowplow__conversion_hosts: ['pay.bikmo.com','buy.bikmo.com','bikmo.com'] # url_hosts to consider
+  snowplow__path_transforms: {'exposure_path': null} # dictionary of path transforms (and their argument, null if none) to perform on the full conversion path (see create_udfs.sql)
+  snowplow__path_lookback_steps: 0 # Limit for the number of marketing channels to look at before the conversion (0 = unlimited)
+  snowplow__path_lookback_days: 30 # Restrict to marketing channels within this many days of the conversion (recommended: 30 / 14 / 7)
+
+  snowplow__consider_intrasession_channels: false # false = only considers the channel at the start (first page view) of the session, true = consider multiple channels in the conversion session as well as historical channels
+  snowplow__channels_to_exclude: [] # Channels to exclude before creating path summaries (and therefore excluded from fractribution analysis), e.g. ['Direct']
+  snowplow__use_snowplow_web_user_mapping_table: false # true if using the Snowplow base model for web user mappings (domain_userid => user_id)
+
+# Overwrite these source table vars in your own dbt_project.yml if not using these defaults:
+  snowplow__page_views_source: "{{ source('derived', 'snowplow_web_page_views') }}"
+  snowplow__conversions_source: "{{ source('cds', 'mkt_session_with_bundle_with_policy') }}"
+
+  # snowplow__web_user_mapping_table: derived.snowplow_web_user_mapping # path (schema and table) to the Snowplow web user mapping table
+
+
+on-run-start: "{{ create_udfs() }}"
+models:
+  snowplow_fractribution:
+    +schema: "derived"
+    +materialized: table
